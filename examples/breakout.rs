@@ -42,6 +42,7 @@ struct View {
     palette: Image,
     font: Font,
     ball: Image,
+    paddle: Image,
 }
 
 impl View {
@@ -56,12 +57,13 @@ impl View {
         (
             Task::using_gpu(|gpu| Image::from_colors(gpu, &Self::COLORS)),
             Font::load(include_bytes!(
-                "../resources/font/Inconsolata-Regular.ttf"
+                "../resources/font/Retro-Gaming.ttf"
             )),
-            Image::load("resources/ball.png")
+            Image::load("resources/ball.png"),
+            Image::load("resources/paddle.png")
         )
             .join()
-            .map(|(palette, font, ball)| View { palette, font, ball })
+            .map(|(palette, font, ball, paddle)| View { palette, font, ball, paddle })
     }
 }
 
@@ -72,6 +74,8 @@ struct BreakoutExample {
     ball: Ball,
     paddle: Paddle,
     bricks: Vec<Brick>,
+    bounds: Rectangle<f32>,
+    score: u32,
 }
 
 struct Ball {
@@ -169,7 +173,7 @@ impl Game for BreakoutExample {
                 keys_pressed: HashSet::new(),
                 mouse_buttons_pressed: HashSet::new(),
                 paddle: Paddle {
-                    size: (150.0, 30.0),
+                    size: (64.0 * 2.0, 12.0 * 2.0),
                     position: 0.0,
                 },
                 ball: Ball {
@@ -178,6 +182,13 @@ impl Game for BreakoutExample {
                     speed: 10.0,
                     normal: Vector::new(0.8, 0.2)
                 },
+                bounds: Rectangle {
+                    x: 0.0,
+                    y: 32.0,
+                    width: window.width(),
+                    height: window.height(),
+                },
+                score: 0,
                 bricks,
             },
             view,
@@ -218,28 +229,42 @@ impl Game for BreakoutExample {
         self.ball.position += self.ball.speed * self.ball.normal; 
 
         // Wall bounces
-        if self.ball.position.x + self.ball.radius >= window.width() {
+        if self.ball.position.x + self.ball.radius >= self.bounds.width {
             self.ball.normal.x = -self.ball.normal.x;
         }
-        if self.ball.position.x - self.ball.radius <= 0.0 {
+        if self.ball.position.x - self.ball.radius <= self.bounds.x {
             self.ball.normal.x = -self.ball.normal.x;
         }
-        if self.ball.position.y + self.ball.radius >= window.height() {
+        if self.ball.position.y + self.ball.radius >= self.bounds.height {
             self.ball.normal.y = -self.ball.normal.y;
         }
-        if self.ball.position.y + self.ball.radius <= 0.0 {
+        if self.ball.position.y + self.ball.radius <= self.bounds.y {
             self.ball.normal.y = -self.ball.normal.y;
         }
 
         // Brick collisions
-        self.bricks = self.bricks.iter().cloned().filter(|brick|{
+        /*self.bricks = self.bricks.iter().cloned().filter(|brick|{
             !BreakoutExample::intersects(&self.ball, Rectangle {
                 x: brick.position.x,
                 y: brick.position.y,
                 width: brick.size.0,
                 height: brick.size.1,
             })
-        }).collect();
+        }).collect();*/
+        
+        for (index, brick) in self.bricks.iter().enumerate() {
+            if BreakoutExample::intersects(&self.ball, Rectangle {
+                x: brick.position.x,
+                y: brick.position.y,
+                width: brick.size.0,
+                height: brick.size.1,
+            }) {
+                self.bricks.remove(index);
+                break;
+            }
+        }
+
+        
 
     }
 
@@ -262,7 +287,7 @@ impl Game for BreakoutExample {
     }
 
     fn draw(&self, view: &mut Self::View, frame: &mut Frame, _timer: &Timer) {
-        frame.clear(Color::BLACK);
+        frame.clear(Color::new(51.0 / 255.0, 153.0 / 255.0, 218.0 / 255.0, 1.0));
 
         // This closure simplifies some of the boilerplate.
         let mut add_aligned_text =
@@ -283,7 +308,7 @@ impl Game for BreakoutExample {
                 });
             };
 
-        view.font.draw(&mut frame.as_target());
+        
 
         for brick in &self.bricks {
             view.palette.draw(
@@ -302,7 +327,7 @@ impl Game for BreakoutExample {
         }
 
         // Draw a small square at the mouse cursor's position.
-        view.palette.draw(
+        view.paddle.draw(
             Quad {
                 source: Rectangle {
                     x: 0.0,
@@ -324,25 +349,30 @@ impl Game for BreakoutExample {
                     width: 1.0,
                     height: 1.0,
                 },
-                position: Point::new(self.ball.position.x + self.ball.radius, self.ball.position.y + self.ball.radius),
+                position: self.ball.position,
                 size: (self.ball.radius * 2.0, self.ball.radius * 2.0),
             },
             &mut frame.as_target(),
         );
 
-        // Draw a small square at the mouse cursor's position.
-        view.palette.draw(
-            Quad {
-                source: Rectangle {
-                    x: 0.0,
-                    y: 0.0,
-                    width: 1.0,
-                    height: 1.0,
-                },
-                position: self.cursor_position - Vector::new(3.0, 3.0),
-                size: (6.0, 6.0),
-            },
-            &mut frame.as_target(),
-        );
+        // Draw UI
+        view.font.add(Text {
+            content: format!("Score: {}", self.score).to_string(),
+            position: Point::new(0.0, 0.0),
+            bounds: (frame.width(), frame.height()),
+            size: 14.0,
+            color: Color::WHITE,
+        });
+
+        view.font.add(Text {
+            content: String::from("Breakout"),
+            position: Point::new(frame.width() - 150.0, 0.0),
+            bounds: (frame.width(), frame.height()),
+            size: 14.0,
+            color: Color::WHITE,
+        });
+
+        view.font.draw(&mut frame.as_target());
+
     }
 }
